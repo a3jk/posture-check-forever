@@ -1,0 +1,15 @@
+# Normalize line endings in the repo; check out source files with LF.
+* text=auto eol=lf
+
+*.lua text eol=lf
+*.toc text eol=lf
+*.xml text eol=lf
+*.md  text eol=lf
+
+# Binary assets
+*.tga  binary
+*.blp  binary
+*.png  binary
+*.ogg  binary
+*.mp3  binary
+*.ttf  binary

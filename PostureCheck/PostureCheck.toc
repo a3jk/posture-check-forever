@@ -1,0 +1,15 @@
+## Interface: 16001
+## Title: Posture Check
+## Notes: A posture reminder timer with a little orc that slowly slouches.
+## Version: 1.0.0
+## SavedVariables: PostureCheckDB
+## IconTexture: Interface\Icons\INV_Misc_PocketWatch_01
+
+Sounds.lua
+Styles.lua
+Core.lua
+Orc.lua
+Peon.lua
+TimerFrame.lua
+MinimapButton.lua
+Options.lua
