@@ -2,10 +2,13 @@
 
 A small World of Warcraft: Forever addon that reminds you to sit up straight. A bar fills over a configurable time while a character's posture slowly gets worse. When the bar is full, a sound plays (a bell by default).
 
-Two characters are available:
+The bar label and the warning text can be changed, so the timer works for other reminders too. With the **Beer** preset it becomes a drinking pace timer: everyone in the party sets the same timer length, and the warning (optionally posted in party/raid chat) says when your pint should be finished.
+
+Three characters are available:
 
 - **Lazy Peon (3D)** uses the game's own Lazy Peon model. He works, then stands around, sits down, falls asleep, and at 90% turns into a sack.
-- **Pixel orc** is a hand-made pixel-art orc whose back slowly rounds. At 90% he turns into a sack of potatoes.
+- **Pixel orc** is a hand-made pixel-art orc seen from the front. He breathes and blinks while his head sinks, his shoulders round and his belly pushes out; then he gets drowsy, dozes off (with a floating "z"), and at 90% turns into a sack of potatoes.
+- **Pint of beer** is a pixel-art pint glass with a foamy head. The beer drains as time runs out, leaving foam rings on the glass.
 
 ## Install
 
@@ -28,8 +31,10 @@ Classic Era loads the `_Vanilla` TOC first and ignores the other one. If a clien
 
 ## Settings
 
-**General:** timer length (1–120 minutes), scale (0.5–2.0), alert sound (built-in presets, or a custom SoundKit ID/name or FileDataID), character, show the timer or the character, lock the position, restart automatically, show an on-screen warning.
+**General:** timer length (1–120 minutes), scale (0.5–2.0), alert sound (built-in presets, or a custom SoundKit ID/name or FileDataID), character, show the timer or the character, lock the position, restart automatically.
 
 **Timer Bar:** show the bar or only the time as text, width, height, texture, color (green to red, class color or fixed colors), border (none, cast bar, tooltip, dialog, gold dialog, thin line), spark, and text on the bar.
 
 **Frame:** border and background style around the whole timer (tooltip, dialog, marble, rock, solid…) and background opacity. Both are off by default.
+
+**Messages:** the label on the bar, the warning message, whether the warning shows on screen (raid warning style) and whether it is also sent to party or raid chat (off by default). The **Posture** and **Beer** presets set the character, label and message in one click.

@@ -8,6 +8,9 @@ ns.defaults = {
     locked = false,
     autoRestart = true,
     showMessage = true,
+    announceGroup = false,
+    barLabel = "Posture Check",
+    alertMessage = "Posture check! Sit up straight.",
     shown = true,
     showBar = true,
     showOrc = true,
@@ -57,10 +60,25 @@ function ns.GetRemaining()
     return math.max(total - (GetTime() - timer.start), 0)
 end
 
+function ns.GetAlertMessage()
+    local msg = strtrim(ns.db.alertMessage or "")
+    return msg ~= "" and msg or ns.defaults.alertMessage
+end
+
+local function GroupChannel()
+    if IsInRaid and IsInRaid() then return "RAID" end
+    if IsInGroup and IsInGroup() then return "PARTY" end
+end
+
 local function OnComplete(now)
     ns.PlayConfiguredSound()
+    local msg = ns.GetAlertMessage()
     if ns.db.showMessage and RaidNotice_AddMessage then
-        RaidNotice_AddMessage(RaidWarningFrame, "Posture check! Sit up straight.", ChatTypeInfo["RAID_WARNING"])
+        RaidNotice_AddMessage(RaidWarningFrame, msg, ChatTypeInfo["RAID_WARNING"])
+    end
+    local channel = ns.db.announceGroup and GroupChannel()
+    if channel then
+        SendChatMessage(msg, channel)
     end
     timer.alertUntil = now + ALERT_SECONDS
     if ns.db.autoRestart then

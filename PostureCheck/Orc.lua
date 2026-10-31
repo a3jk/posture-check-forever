@@ -1,24 +1,33 @@
 local _, ns = ...
 
--- A tiny side-view orc drawn as pixel art from simple shapes along a curved
--- spine. Hunch 0 = standing tall; as it grows the back rounds and the head
--- droops. Past SACK_AT he gives up entirely and becomes a sack of potatoes.
--- Shapes are defined in "units"; SCALE grid pixels make up one unit.
+-- A tiny orc seen from the front, drawn as pixel art from simple shapes.
+-- Hunch 0 = standing tall; as it grows his head sinks and bows (so you see
+-- more of his scalp), his shoulders round inward, his belly pushes out and his
+-- hands drift together. He breathes and blinks, gets drowsy, dozes off, and
+-- past SACK_AT gives up entirely and becomes a sack of potatoes.
+-- Shapes are defined in "units"; SCALE grid pixels make up one unit. Face
+-- details are stamped in grid pixels around the centre column so they stay
+-- symmetric.
 
 local SCALE = 1.35
 local W, H = 33, 37         -- grid size in pixels
 local PIXEL = 2             -- on-screen size of one grid pixel
-local HIP_X, HIP_Y = 8.5, 9
-local SPINE_LEN = 9
-local SPINE_STEPS = 16
-local MAX_ANGLE = 1.35      -- forward lean at the neck (radians) when fully hunched
-local HEAD_DIST = 2.2
-local HEAD_R = 2.6
-local JAW_R = 1.9
-local LEVELS = 40           -- distinct poses; the grid is only rebuilt when the level changes
+local CX = W / SCALE / 2    -- centre line in units
+local CC = (W - 1) / 2      -- centre column in grid pixels
+local WAIST_Y = 9
+local HEAD_R = 2.7
+local LEVELS = 40           -- distinct poses
 local SACK_AT = 0.9
 local SACK_LEVEL = math.floor(SACK_AT * LEVELS + 0.5)
 local SACK_X = 11
+
+-- Animation timing, in seconds.
+local BREATH_PERIOD = 3.2   -- grows as he slouches, so he breathes slower
+local BLINK_EVERY = 4
+local BLINK_TIME = 0.15
+local DROWSY_AT = 0.5       -- blinks get longer from here...
+local DOZE_AT = 0.78        -- ...and from here his eyes stay shut
+local Z_STEP = 0.6          -- time per step of the rising "z"
 
 local PALETTE = {
     outline    = { 0.08, 0.06, 0.04 },
@@ -40,6 +49,7 @@ local PALETTE = {
     hair       = { 0.10, 0.08, 0.08 },
     eye        = { 0.95, 0.20, 0.10 },
     tusk       = { 0.96, 0.93, 0.80 },
+    snore      = { 0.85, 0.90, 1.00 },
     burlap     = { 0.78, 0.64, 0.42 },
     burlapDark = { 0.62, 0.49, 0.30 },
     rope       = { 0.45, 0.32, 0.17 },
@@ -48,7 +58,10 @@ local PALETTE = {
     potatoSpot = { 0.46, 0.32, 0.17 },
 }
 
-local sin, cos, floor, abs, pi = math.sin, math.cos, math.floor, math.abs, math.pi
+-- A "z" in grid pixels, top row first.
+local Z_SHAPE = { "xxx", "..x", ".x.", "x..", "xxx" }
+
+local sin, floor, abs, max, pi = math.sin, math.floor, math.abs, math.max, math.pi
 
 local function Dist2(px, py, x, y)
     local dx, dy = px - x, py - y
@@ -76,11 +89,21 @@ local function Fill(grid, sample)
     end
 end
 
-local function Stamp(grid, x, y, color)
-    local gx, gy = floor(x * SCALE), floor(y * SCALE)
+-- Paints a grid pixel; x and y are in grid pixels.
+local function Put(grid, gx, gy, color)
     if gx >= 0 and gx < W and gy >= 0 and gy < H then
         grid[gy * W + gx + 1] = color
     end
+end
+
+-- Paints a pixel at (CC - dx) and its mirror at (CC + dx).
+local function PutPair(grid, dx, gy, color)
+    Put(grid, CC - dx, gy, color)
+    Put(grid, CC + dx, gy, color)
+end
+
+local function Row(y)
+    return floor(y * SCALE)
 end
 
 local function Outline(grid)
@@ -105,128 +128,134 @@ end
 -- Orc
 ---------------------------------------------------------------------------
 
-local function BuildPose(bend)
-    local spine = {}
-    local x, y, a = HIP_X, HIP_Y, 0
-    local ds = SPINE_LEN / SPINE_STEPS
-    spine[0] = { x = x, y = y, s = 0, a = 0, r = 2.6 }
-    for i = 1, SPINE_STEPS do
-        local s = i / SPINE_STEPS
-        -- Lean grows toward the top of the spine, which rounds the upper back.
-        a = bend * MAX_ANGLE * s ^ 1.4
-        x = x + sin(a) * ds
-        y = y + cos(a) * ds
-        spine[i] = { x = x, y = y, s = s, a = a, r = 2.6 + 1.0 * sin(pi * s * 0.9) }
-    end
-
-    local neck = spine[SPINE_STEPS]
-    local hx = neck.x + sin(a) * HEAD_DIST
-    local hy = neck.y + cos(a) * HEAD_DIST
-
-    -- The head tilts less than the neck, so the orc peers forward and down.
-    local ha = a * 0.6
-    local ux, uy = sin(ha), cos(ha)     -- head "up"
-    local fx, fy = cos(ha), -sin(ha)    -- head "forward"
-
-    local shoulder = spine[13]
-    local sa = shoulder.a
-    local sx = shoulder.x + cos(sa) * 0.8
-    local sy = shoulder.y - sin(sa) * 0.8
-    local knotX, knotY = hx + ux * 2.6 - fx * 0.9, hy + uy * 2.6 - fy * 0.9
+-- `bend` 0..1 is how slouched he is; `lift` raises the upper body (breathing).
+local function BuildPose(bend, lift)
+    local sh = 16 - 1.6 * bend + lift       -- shoulder line
+    local shoulderW = 5.2 - 0.9 * bend
+    local headY = sh + 3.4 - 2.2 * bend     -- the head sinks between the shoulders
+    local handX = 6.6 - 2.8 * bend          -- hands drift in front of the belly
+    local knotY = headY + 2.8 - 1.2 * bend
 
     return {
-        spine = spine,
-        headX = hx, headY = hy,
-        fx = fx, fy = fy, ux = ux, uy = uy,
-        jawX = hx + fx * 1.1 - ux * 1.0, jawY = hy + fy * 1.1 - uy * 1.0,
-        earX = hx - fx * 0.4 + ux * 0.2, earY = hy - fy * 0.4 + uy * 0.2,
-        earTipX = hx - fx * 1.1 + ux * 0.9, earTipY = hy - fy * 1.1 + uy * 0.9,
-        knotX = knotX, knotY = knotY,
-        bandX = hx + ux * 1.8 - fx * 0.7, bandY = hy + uy * 1.8 - fy * 0.7,
-        tailX = knotX - fx * 2.0 - ux * 1.4, tailY = knotY - fy * 2.0 - uy * 1.4,
-        eyeX = hx + fx * 1.3 + ux * 0.6, eyeY = hy + fy * 1.3 + uy * 0.6,
-        tuskX = hx + fx * 2.2 - ux * 1.1, tuskY = hy + fy * 2.2 - uy * 1.1,
-        padX = shoulder.x + sin(sa) * 0.4 - cos(sa) * 0.2,
-        padY = shoulder.y + cos(sa) * 0.4 + sin(sa) * 0.2,
-        rivetX = shoulder.x + sin(sa) * 1.2, rivetY = shoulder.y + cos(sa) * 1.2,
-        shoulderX = sx, shoulderY = sy,
-        handX = sx + 0.6 + bend, handY = sy - 6,
+        bend = bend,
+        sh = sh,
+        shoulderW = shoulderW,
+        waistW = 3.8 + 0.6 * bend,
+        headY = headY,
+        jawY = headY - 1.3 - 0.5 * bend,
+        -- Bowing the head tips the face down and shows more of the scalp.
+        scalpY = headY + 2.3 - 1.6 * bend,
+        eyeY = headY + 0.3 - 1.0 * bend,
+        knotY = knotY,
+        bandY = knotY - 0.9,
+        padX = shoulderW + 0.4, padY = sh - 0.2 + 0.5 * bend,
+        armX = shoulderW + 0.6, armY = sh - 1.2,
+        handX = handX, handY = 8.2 - 0.6 * bend + lift * 0.5,
     }
 end
 
 local function SampleOrc(pose, px, py)
-    -- Hair: band, topknot and ponytail
-    if Dist2(px, py, pose.bandX, pose.bandY) <= 0.3 then return "leather" end
-    if Dist2(px, py, pose.knotX, pose.knotY) <= 1.2
-        or SegDist2(px, py, pose.knotX, pose.knotY, pose.tailX, pose.tailY) <= 0.25 then
-        return "hair"
+    local dx = px - CX
+    local ax = abs(dx)
+
+    -- Topknot with a leather band
+    if Dist2(ax, py, 0, pose.bandY) <= 0.3 then return "leather" end
+    if Dist2(ax, py, 0, pose.knotY) <= 1.1 then return "hair" end
+
+    -- Head and jaw, with the scalp shaded where it tips toward us
+    if Dist2(ax, py, 0, pose.headY) <= HEAD_R * HEAD_R
+        or InEllipse(ax, py, 0, pose.jawY, 2.6, 1.8) then
+        if py > pose.scalpY then return "skinShade" end
+        return dx < -1.6 and "skinLight" or "skin"
     end
 
-    -- Head
-    if Dist2(px, py, pose.earTipX, pose.earTipY) <= 0.2 or Dist2(px, py, pose.earX, pose.earY) <= 0.55 then
+    -- Pointy ears
+    if SegDist2(ax, py, 2.4, pose.headY + 0.2, 3.7, pose.headY + 1.1 - 0.6 * pose.bend) <= 0.3 then
         return "skinDark"
     end
-    if Dist2(px, py, pose.headX, pose.headY) <= HEAD_R * HEAD_R
-        or Dist2(px, py, pose.jawX, pose.jawY) <= JAW_R * JAW_R then
-        local front = (px - pose.headX) * pose.fx + (py - pose.headY) * pose.fy
-        return front < -1.4 and "skinShade" or "skin"
-    end
 
-    -- Shoulder pad
-    if Dist2(px, py, pose.padX, pose.padY) <= 2.9 then
+    -- Shoulder pads
+    if Dist2(ax, py, pose.padX, pose.padY) <= 3.6 then
         return py < pose.padY - 0.6 and "padDark" or "pad"
     end
 
-    -- Arm with a leather bracer near the wrist
-    if Dist2(px, py, pose.handX, pose.handY) <= 1.7 then return "skinDark" end
-    local armD, armT = SegDist2(px, py, pose.shoulderX, pose.shoulderY, pose.handX, pose.handY)
-    if armD <= 1.2 then
+    -- Arms with leather bracers near the wrists
+    if Dist2(ax, py, pose.handX, pose.handY) <= 1.5 then return "skinDark" end
+    local armD, armT = SegDist2(ax, py, pose.armX, pose.armY, pose.handX, pose.handY + 0.8)
+    if armD <= 1.3 then
         return (armT > 0.62 and armT < 0.85) and "leather" or "skinDark"
     end
 
-    -- Loincloth hanging from the belt
-    if px >= HIP_X + 0.3 and px <= HIP_X + 2.8 and py >= HIP_Y - 4 and py <= HIP_Y then
-        return py < HIP_Y - 3.3 and "clothDark" or "cloth"
+    -- Neck
+    if ax <= 1.6 and py >= pose.sh - 0.5 and py <= pose.headY then return "skinShade" end
+
+    -- Torso: widens from the waist to the shoulders, plus a belly that grows
+    local t = (py - WAIST_Y) / (pose.sh - WAIST_Y)
+    local hw = pose.waistW + (pose.shoulderW - pose.waistW) * t
+    local belly = pose.bend > 0 and InEllipse(ax, py, 0, WAIST_Y + 1.8, pose.waistW + 0.8 * pose.bend, 2.2)
+    if (t >= 0 and t <= 1 and ax <= hw) or belly then
+        if py < WAIST_Y + 0.6 then return "leather" end     -- belt
+        if ax > hw - 0.8 then return "skinShade" end
+        -- Chest line and a line down the middle fade as he slumps.
+        if pose.bend < 0.5 then
+            local pecY = pose.sh - 2.9
+            if abs(py - pecY) < 0.35 and ax > 0.6 and ax < 3.2 then return "skinShade" end
+            if ax < 0.3 and py > WAIST_Y + 1 and py < pecY then return "skinShade" end
+        end
+        return dx < 1.8 - hw and "skinLight" or "skin"
     end
 
-    -- Torso, shaded darker along the back and lighter on the chest
-    for i = 0, SPINE_STEPS do
-        local p = pose.spine[i]
-        if Dist2(px, py, p.x, p.y) <= p.r * p.r then
-            if py < HIP_Y then return "pants" end
-            if py < HIP_Y + 1.5 then return "leather" end
-            local front = (px - p.x) * cos(p.a) - (py - p.y) * sin(p.a)
-            if front < -0.45 * p.r then return "skinShade" end
-            if front > 0.5 * p.r and p.s > 0.4 then return "skinLight" end
-            return "skin"
-        end
+    -- Belt
+    if ax <= pose.waistW + 0.1 and py >= WAIST_Y - 0.6 and py < WAIST_Y + 0.6 then return "leather" end
+
+    -- Loincloth over the legs
+    if py >= 3.8 and py < WAIST_Y - 0.6 and ax <= 1.6 - (WAIST_Y - 0.6 - py) * 0.1 then
+        return py < 4.5 and "clothDark" or "cloth"
     end
 
     -- Legs and boots
-    if py < 2 then
-        local boot = (px >= HIP_X - 0.2 and px <= HIP_X + 3.6) or (px >= HIP_X - 2.6 and px <= HIP_X + 1.0)
-        if boot then return py >= 1.4 and "bootsLight" or "boots" end
-    elseif py <= HIP_Y then
-        if px >= HIP_X - 0.2 and px <= HIP_X + 2.4 then return "pants" end
-        if px >= HIP_X - 2.6 and px <= HIP_X - 0.2 then return "pantsDark" end
+    if py < 1.6 then
+        if ax >= 0.2 and ax <= 3.6 then return py >= 1.1 and "bootsLight" or "boots" end
+    elseif py < WAIST_Y then
+        if ax >= 0.3 and ax <= 3.3 then return ax < 1.0 and "pantsDark" or "pants" end
     end
     return nil
 end
 
-local function DrawOrc(bend)
-    local pose = BuildPose(bend)
+local function DrawOrc(bend, lift, eyesShut, zStep)
+    local pose = BuildPose(bend, lift)
     local grid = {}
     Fill(grid, function(px, py) return SampleOrc(pose, px, py) end)
 
-    local ux, uy, fx, fy = pose.ux, pose.uy, pose.fx, pose.fy
-    Stamp(grid, pose.eyeX, pose.eyeY, "eye")
-    Stamp(grid, pose.eyeX + ux * 0.8, pose.eyeY + uy * 0.8, "outline")     -- heavy brow
-    Stamp(grid, pose.eyeX + ux * 0.8 - fx * 0.7, pose.eyeY + uy * 0.8 - fy * 0.7, "outline")
-    Stamp(grid, pose.tuskX, pose.tuskY, "tusk")
-    Stamp(grid, pose.tuskX + ux * 0.7, pose.tuskY + uy * 0.7, "tusk")
-    Stamp(grid, pose.tuskX - fx * 0.9 - ux * 0.5, pose.tuskY - fy * 0.9 - uy * 0.5, "outline")  -- mouth
-    Stamp(grid, pose.rivetX, pose.rivetY, "rivet")
-    Stamp(grid, HIP_X + 2.1, HIP_Y + 0.7, "buckle")
+    local eye = Row(pose.eyeY)
+    if eyesShut then
+        PutPair(grid, 2, eye, "outline")
+        PutPair(grid, 1, eye, "skinShade")      -- heavy lids
+    else
+        PutPair(grid, 2, eye, "eye")
+    end
+    -- Angry brows, lower on the inside; they relax as he gets tired.
+    PutPair(grid, 1, eye + (bend < DROWSY_AT and 1 or 2), "outline")
+    PutPair(grid, 2, eye + 2, "outline")
+    PutPair(grid, 3, eye + 2, "outline")
+
+    Put(grid, CC, eye - 1, "skinDark")          -- nose
+    for dx = -1, 1 do Put(grid, CC + dx, eye - 3, "outline") end    -- mouth
+    PutPair(grid, 2, eye - 3, "tusk")
+    PutPair(grid, 2, eye - 2, "tusk")
+
+    PutPair(grid, floor(pose.padX * SCALE), Row(pose.padY + 0.7), "rivet")
+    Put(grid, CC, Row(WAIST_Y), "buckle")
+
+    -- A "z" floating up beside his head while he dozes.
+    if zStep then
+        local left, top = CC + 5 + zStep, Row(pose.headY + 2.5) + 2 * zStep + #Z_SHAPE
+        for r, line in ipairs(Z_SHAPE) do
+            for c = 1, #line do
+                if line:sub(c, c) == "x" then Put(grid, left + c - 1, top - r, "snore") end
+            end
+        end
+    end
     return grid
 end
 
@@ -239,6 +268,10 @@ local POTATOES = {
     { 21.8, 3.2, 1.5, 1.1 },
     { 3.0, 1.1, 1.6, 1.1 },
 }
+
+local function Stamp(grid, x, y, color)
+    Put(grid, floor(x * SCALE), floor(y * SCALE), color)
+end
 
 -- slump 0..1 squashes the sack a little flatter and wider.
 local function SampleSack(px, py, slump)
@@ -282,11 +315,33 @@ end
 
 ---------------------------------------------------------------------------
 
-local function Rasterize(level)
+-- Picks the animation frame for a level at time `now`. Returns a cache key
+-- and the arguments for DrawOrc (nothing for the sack, which doesn't move).
+local function Frame(level, now)
+    if level >= SACK_LEVEL then return tostring(level) end
+    local bend = level / SACK_LEVEL
+
+    local period = BREATH_PERIOD * (1 + bend)
+    local lift = sin(2 * pi * now / period) > 0 and 1 / SCALE or 0     -- one pixel
+
+    local shut, zStep
+    if bend >= DOZE_AT then
+        shut = true
+        zStep = floor(now / Z_STEP) % 3
+    else
+        local blink = BLINK_TIME + max(0, bend - DROWSY_AT) * 6
+        shut = now % BLINK_EVERY < blink
+    end
+
+    local key = string.format("%d:%d:%s:%s", level, lift > 0 and 1 or 0, tostring(shut), tostring(zStep))
+    return key, bend, lift, shut, zStep
+end
+
+local function Rasterize(level, bend, lift, shut, zStep)
     if level >= SACK_LEVEL then
         return Outline(DrawSack((level - SACK_LEVEL) / (LEVELS - SACK_LEVEL)))
     end
-    return Outline(DrawOrc(level / SACK_LEVEL))
+    return Outline(DrawOrc(bend, lift, shut, zStep))
 end
 
 local cache = {}
@@ -306,28 +361,35 @@ function ns.CreateOrc(parent)
         end
     end
 
-    local orc = { frame = holder, level = -1 }
+    local orc = { frame = holder }
+    local shown = {}    -- color currently on each pixel
 
+    -- Called every tick: the pose follows `amount`, the animation follows the clock.
     function orc:SetHunch(amount)
         if amount < 0 then amount = 0 elseif amount > 1 then amount = 1 end
         local level = floor(amount * LEVELS)
-        if level == self.level then return end
-        self.level = level
+        local key, bend, lift, shut, zStep = Frame(level, GetTime())
+        if key == self.key then return end
+        self.key = key
 
-        local grid = cache[level]
+        local grid = cache[key]
         if not grid then
-            grid = Rasterize(level)
-            cache[level] = grid
+            grid = Rasterize(level, bend, lift, shut, zStep)
+            cache[key] = grid
         end
+        -- Only touch the pixels that changed since the last frame.
         for i = 1, W * H do
             local c = grid[i]
-            local tex = pixels[i]
-            if c then
-                local rgb = PALETTE[c]
-                tex:SetColorTexture(rgb[1], rgb[2], rgb[3], 1)
-                tex:Show()
-            else
-                tex:Hide()
+            if c ~= shown[i] then
+                shown[i] = c
+                local tex = pixels[i]
+                if c then
+                    local rgb = PALETTE[c]
+                    tex:SetColorTexture(rgb[1], rgb[2], rgb[3], 1)
+                    tex:Show()
+                else
+                    tex:Hide()
+                end
             end
         end
     end

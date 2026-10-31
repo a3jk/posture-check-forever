@@ -7,7 +7,7 @@ local _, ns = ...
 local GAP = 12
 local PAD = 8
 local ALERT_RGB = { 1, 0.2, 0.2 }
-local CHARACTERS = { peon = "CreatePeon", pixel = "CreateOrc" }
+local CHARACTERS = { peon = "CreatePeon", pixel = "CreateOrc", pint = "CreatePint" }
 
 local frame, figure, bar, barBorder, castBorder, overlay, spark, nameText, timeText, bigText
 local barBorderColor, frameBorderColor  -- base colors, tinted red while alerting
@@ -214,11 +214,15 @@ function ns.InitTimerFrame()
     textLayer:SetAllPoints()
     textLayer:SetFrameLevel(barBorder:GetFrameLevel() + 1)
 
-    nameText = textLayer:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    nameText:SetPoint("LEFT", 4, 1)
-
     timeText = textLayer:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     timeText:SetPoint("RIGHT", -4, 1)
+
+    -- The label is user text, so clip it before it runs into the time.
+    nameText = textLayer:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    nameText:SetPoint("LEFT", 4, 1)
+    nameText:SetPoint("RIGHT", timeText, "LEFT", -4, 0)
+    nameText:SetJustifyH("LEFT")
+    nameText:SetWordWrap(false)
 
     -- Text-only readout used when the bar is disabled
     bigText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
@@ -249,20 +253,20 @@ function ns.UpdateTimerFrame(progress, remaining, alerting)
 
         timeText:SetText(FormatTime(remaining))
         if alerting then
-            nameText:SetText("Sit up straight!")
+            nameText:SetText(ns.GetAlertMessage())
             nameText:SetTextColor(1, 0.25, 0.25)
         else
-            nameText:SetText("Posture Check")
+            nameText:SetText(ns.db.barLabel)
             nameText:SetTextColor(1, 1, 1)
         end
         overlay:SetAlpha(pulse * 0.35)
         if barBorderColor then TintBorder(barBorder, barBorderColor, pulse) end
     else
+        -- The warning text can be long, so the big readout just flashes red.
+        bigText:SetText(FormatTime(remaining))
         if alerting then
-            bigText:SetText("Sit up!")
             bigText:SetTextColor(1, 0.25 + 0.3 * pulse, 0.25 + 0.3 * pulse)
         else
-            bigText:SetText(FormatTime(remaining))
             bigText:SetTextColor(1, 0.82, 0)
         end
     end

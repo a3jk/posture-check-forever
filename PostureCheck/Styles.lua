@@ -5,6 +5,7 @@ local _, ns = ...
 ns.CHARACTERS = {
     { key = "peon",  name = "Lazy Peon (3D)" },
     { key = "pixel", name = "Pixel orc" },
+    { key = "pint",  name = "Pint of beer" },
 }
 
 ns.BAR_TEXTURES = {

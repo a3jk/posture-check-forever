@@ -3,12 +3,25 @@ local _, ns = ...
 local COLUMN_W = 270
 local CONTROL_W = 220
 
+-- One-click setups for what the timer is used for.
+local PRESETS = {
+    { name = "Posture", character = ns.defaults.character, barLabel = ns.defaults.barLabel,
+      alertMessage = ns.defaults.alertMessage },
+    { name = "Beer", character = "pint", barLabel = "Drink up",
+      alertMessage = "Bottoms up! Finish your pint." },
+}
+
 local panel
 local refreshers = {}
 local dropdownCount = 0
+local textBoxCount = 0
 
 local function Apply()
     ns.ApplyTimerFrameSettings()
+end
+
+local function Refresh()
+    for _, refresh in ipairs(refreshers) do refresh() end
 end
 
 -- Stacks controls top-to-bottom in one column of the panel.
@@ -118,6 +131,29 @@ local function AddDropdown(col, text, items, get, set)
     return dd
 end
 
+-- Saves when the box loses focus (Enter and Escape both drop focus).
+local function AddTextBox(col, text, key)
+    local label = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    label:SetText(text)
+    col:Place(label, 18)
+
+    textBoxCount = textBoxCount + 1
+    local box = CreateFrame("EditBox", "PostureCheckTextBox" .. textBoxCount, panel, "InputBoxTemplate")
+    box:SetSize(CONTROL_W - 6, 20)
+    box:SetAutoFocus(false)
+    box:SetMaxLetters(255)
+    box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    box:SetScript("OnEditFocusLost", function(self)
+        ns.db[key] = strtrim(self:GetText())
+    end)
+    refreshers[#refreshers + 1] = function()
+        box:SetText(ns.db[key] or "")
+    end
+    col:Place(box, 32, 6)
+    return box
+end
+
 local function StyleSetting(key)
     return function() return ns.db[key] end, function(value)
         ns.db[key] = value
@@ -189,7 +225,6 @@ local function BuildGeneral(col)
     AddCheckbox(col, "Show character", "showOrc", Apply)
     AddCheckbox(col, "Lock timer position", "locked")
     AddCheckbox(col, "Restart automatically", "autoRestart")
-    AddCheckbox(col, "Show on-screen warning", "showMessage")
 end
 
 local function BuildBar(col)
@@ -228,9 +263,51 @@ local function BuildFrame(col)
         StyleSetting("characterY"))
 end
 
+local function BuildMessages(col)
+    local labelBox = AddTextBox(col, "Bar label", "barLabel")
+    local messageBox = AddTextBox(col, "Warning message", "alertMessage")
+
+    AddCheckbox(col, "Show on-screen warning", "showMessage")
+    AddCheckbox(col, "Also send it to party/raid chat", "announceGroup")
+
+    local presetLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    presetLabel:SetText("Presets")
+    col:Place(presetLabel, 22)
+
+    local prev
+    for _, preset in ipairs(PRESETS) do
+        local button = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+        button:SetSize(106, 22)
+        button:SetText(preset.name)
+        button:SetScript("OnClick", function()
+            -- Drop focus first so an open box doesn't save over the preset.
+            labelBox:ClearFocus()
+            messageBox:ClearFocus()
+            ns.db.character = preset.character
+            ns.db.barLabel = preset.barLabel
+            ns.db.alertMessage = preset.alertMessage
+            Apply()
+            Refresh()
+        end)
+        if prev then
+            button:SetPoint("LEFT", prev, "RIGHT", 8, 0)
+        else
+            col:Place(button, 34)
+        end
+        prev = button
+    end
+
+    local hint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    hint:SetWidth(CONTROL_W)
+    hint:SetJustifyH("LEFT")
+    hint:SetText("Presets set the character, bar label and warning message. "
+        .. "Use the same timer length as your party to keep pace together.")
+    col:Place(hint, 40)
+end
+
 local function CreatePanel()
     panel = CreateFrame("Frame", "PostureCheckOptions", UIParent, "BasicFrameTemplateWithInset")
-    panel:SetSize(20 + 3 * COLUMN_W, 550)
+    panel:SetSize(20 + 4 * COLUMN_W, 550)
     panel:SetPoint("CENTER")
     panel:SetFrameStrata("DIALOG")
     panel:SetMovable(true)
@@ -249,10 +326,9 @@ local function CreatePanel()
     BuildGeneral(NewColumn(panel, 1, "General"))
     BuildBar(NewColumn(panel, 2, "Timer Bar"))
     BuildFrame(NewColumn(panel, 3, "Frame"))
+    BuildMessages(NewColumn(panel, 4, "Messages"))
 
-    panel:SetScript("OnShow", function()
-        for _, refresh in ipairs(refreshers) do refresh() end
-    end)
+    panel:SetScript("OnShow", Refresh)
 end
 
 function ns.ToggleOptions()
