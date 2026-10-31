@@ -228,7 +228,8 @@ local function BuildGeneral(col)
 end
 
 local function BuildBar(col)
-    AddCheckbox(col, "Show timer bar (off = text only)", "showBar", Apply)
+    AddCheckbox(col, "Show timer bar", "showBar", Apply)
+    AddCheckbox(col, "Show time", "showTime", Apply)
 
     AddSlider(col, 60, 400, 5,
         function(v) return string.format("Width: %d", v) end,
@@ -243,7 +244,7 @@ local function BuildBar(col)
     AddDropdown(col, "Border", ns.BAR_BORDERS, StyleSetting("barBorder"))
 
     AddCheckbox(col, "Show spark", "showSpark")
-    AddCheckbox(col, "Show text on bar", "showBarText", Apply)
+    AddCheckbox(col, "Show label on bar", "showBarText", Apply)
 end
 
 local function BuildFrame(col)

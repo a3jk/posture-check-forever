@@ -63,7 +63,15 @@ local function ApplyBarStyle()
     bar:SetStatusBarTexture(ns.FindStyle(ns.BAR_TEXTURES, db.barTexture).path)
     spark:SetSize(32, h * 2.4)
     nameText:SetShown(db.showBarText)
-    timeText:SetShown(db.showBarText)
+    timeText:SetShown(db.showTime)
+    -- Without the time, the label may use the full width of the bar.
+    nameText:ClearAllPoints()
+    nameText:SetPoint("LEFT", 4, 1)
+    if db.showTime then
+        nameText:SetPoint("RIGHT", timeText, "LEFT", -4, 0)
+    else
+        nameText:SetPoint("RIGHT", -4, 1)
+    end
 
     local style = ns.FindStyle(ns.BAR_BORDERS, db.barBorder)
     castBorder:SetShown(style.castbar == true)
@@ -118,18 +126,21 @@ end
 local function Layout()
     local db = ns.db
     local showOrc, showBar = db.showOrc, db.showBar
+    local showBigText = not showBar and db.showTime
     local pad = ApplyFrameStyle()
     local outset = ApplyBarStyle()
     SelectFigure()
     local orcW, orcH = figure.frame:GetSize()
 
     bar:SetShown(showBar)
-    bigText:SetShown(not showBar)
+    bigText:SetShown(showBigText)
 
-    local content = showBar and bar or bigText
-    local contentW = showBar and (db.barWidth + 2 * outset) or 80
-    local contentH = showBar and (db.barHeight + 2 * outset) or 24
-    local innerW = (showOrc and (orcW + GAP) or 0) + contentW
+    -- With both the bar and the time off, only the character is left.
+    local content = showBar and bar or showBigText and bigText or nil
+    local contentW = showBar and (db.barWidth + 2 * outset) or showBigText and 80 or 0
+    local contentH = showBar and (db.barHeight + 2 * outset) or showBigText and 24 or 0
+    local gap = (showOrc and content) and GAP or 0
+    local innerW = (showOrc and orcW or 0) + gap + contentW
     local innerH = math.max(showOrc and orcH or 0, contentH)
     local frameH = innerH + 2 * pad
     frame:SetSize(innerW + 2 * pad, frameH)
@@ -139,9 +150,11 @@ local function Layout()
     figure.frame:ClearAllPoints()
     figure.frame:SetPoint("LEFT", frame, "LEFT", pad + db.characterX, db.characterY)
 
-    local x = pad + (showOrc and (orcW + GAP) or 0) + (showBar and outset or 0)
-    content:ClearAllPoints()
-    content:SetPoint("LEFT", frame, "LEFT", x, 0)
+    if content then
+        local x = pad + (showOrc and orcW or 0) + gap + (showBar and outset or 0)
+        content:ClearAllPoints()
+        content:SetPoint("LEFT", frame, "LEFT", x, 0)
+    end
 end
 
 function ns.ApplyTimerFrameSettings()
@@ -219,8 +232,6 @@ function ns.InitTimerFrame()
 
     -- The label is user text, so clip it before it runs into the time.
     nameText = textLayer:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    nameText:SetPoint("LEFT", 4, 1)
-    nameText:SetPoint("RIGHT", timeText, "LEFT", -4, 0)
     nameText:SetJustifyH("LEFT")
     nameText:SetWordWrap(false)
 
@@ -232,10 +243,15 @@ function ns.InitTimerFrame()
     ns.ApplyTimerFrameSettings()
 end
 
-function ns.UpdateTimerFrame(progress, remaining, alerting)
+-- True when the shown character (the pint) is the way to restart the timer.
+function ns.FigureWaitsForClick()
+    return figure ~= nil and figure.waitsForClick == true and ns.db.shown and ns.db.showOrc
+end
+
+function ns.UpdateTimerFrame(progress, remaining, alerting, finished)
     if not frame or not frame:IsShown() then return end
 
-    figure:SetHunch(progress)
+    figure:SetHunch(progress, finished)
 
     local pulse = alerting and (0.5 + 0.5 * math.sin(GetTime() * 8)) or 0
     if frameBorderColor then TintBorder(frame, frameBorderColor, pulse) end

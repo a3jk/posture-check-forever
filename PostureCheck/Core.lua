@@ -24,6 +24,7 @@ ns.defaults = {
     barBorder = "castbar",
     showSpark = true,
     showBarText = true,
+    showTime = true,
     frameBorder = "none",
     frameBackground = "none",
     frameAlpha = 0.75,
@@ -81,7 +82,7 @@ local function OnComplete(now)
         SendChatMessage(msg, channel)
     end
     timer.alertUntil = now + ALERT_SECONDS
-    if ns.db.autoRestart then
+    if ns.db.autoRestart and not ns.FigureWaitsForClick() then
         timer.start = now
     else
         timer.done = true
@@ -101,11 +102,12 @@ local function Tick()
     local progress = timer.done and 1 or math.min(elapsed / total, 1)
     local remaining = timer.done and 0 or math.max(total - elapsed, 0)
     local alerting = timer.done or now < timer.alertUntil
+    local finished = timer.done
     if ns.previewProgress then
         -- Freeze the display at a chosen point; the real timer keeps running.
-        progress, remaining, alerting = ns.previewProgress, total * (1 - ns.previewProgress), false
+        progress, remaining, alerting, finished = ns.previewProgress, total * (1 - ns.previewProgress), false, false
     end
-    ns.UpdateTimerFrame(progress, remaining, alerting)
+    ns.UpdateTimerFrame(progress, remaining, alerting, finished)
 end
 
 -- The timer runs on its own frame so it keeps ticking while the display is hidden.

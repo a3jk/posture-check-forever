@@ -8,7 +8,7 @@ Three characters are available:
 
 - **Lazy Peon (3D)** uses the game's own Lazy Peon model. He works, then stands around, sits down, falls asleep, and at 90% turns into a sack.
 - **Pixel orc** is a hand-made pixel-art orc seen from the front. He breathes and blinks while his head sinks, his shoulders round and his belly pushes out; then he gets drowsy, dozes off (with a floating "z"), and at 90% turns into a sack of potatoes.
-- **Pint of beer** is a pixel-art pint glass with a foamy head. The beer drains as time runs out, leaving foam rings on the glass.
+- **Pint of beer** is a pixel-art pint glass with a foamy head. The beer drains as time runs out, leaving foam rings on the glass. When it is empty the glass spins upside down and blinks, and the timer waits until you click the glass for the next pint (it never restarts on its own while the pint is shown).
 
 ## Install
 
@@ -33,7 +33,7 @@ Classic Era loads the `_Vanilla` TOC first and ignores the other one. If a clien
 
 **General:** timer length (1–120 minutes), scale (0.5–2.0), alert sound (built-in presets, or a custom SoundKit ID/name or FileDataID), character, show the timer or the character, lock the position, restart automatically.
 
-**Timer Bar:** show the bar or only the time as text, width, height, texture, color (green to red, class color or fixed colors), border (none, cast bar, tooltip, dialog, gold dialog, thin line), spark, and text on the bar.
+**Timer Bar:** show the bar and the time separately (with the bar off, the time is shown as large text; with both off, only the character is left), width, height, texture, color (green to red, class color or fixed colors), border (none, cast bar, tooltip, dialog, gold dialog, thin line), spark, and the label on the bar.
 
 **Frame:** border and background style around the whole timer (tooltip, dialog, marble, rock, solid…) and background opacity. Both are off by default.
 
