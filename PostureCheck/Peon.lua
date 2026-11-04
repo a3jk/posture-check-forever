@@ -9,14 +9,15 @@ local SACK_FILE_ID = 199745     -- world/generic/passivedoodads/furniture/contai
 local WIDTH, HEIGHT = 80, 96
 local FACING = 0.6              -- radians; a three-quarter view
 local SACK_FACING = 0.4
+local WORK_UNTIL = 0.25
 
 -- Stages from best to worst posture. Each lists animation IDs to try in
 -- order, since not every model has every animation.
 local STAGES = {
-    { upTo = 0.35, anims = { 136, 0 } },   -- EmoteWorkNoSheathe, Stand
-    { upTo = 0.6,  anims = { 0 } },        -- Stand
-    { upTo = 0.75, anims = { 97, 0 } },    -- SitGround
-    { upTo = 0.9,  anims = { 100, 97 } },  -- Sleep, SitGround
+    { upTo = WORK_UNTIL,       anims = { 136, 0 } },   -- EmoteWorkNoSheathe, Stand
+    { upTo = ns.STAGES.drowsy, anims = { 0 } },        -- Stand
+    { upTo = ns.STAGES.asleep, anims = { 97, 0 } },    -- SitGround
+    { upTo = ns.STAGES.sack,   anims = { 100, 97 } },  -- Sleep, SitGround
 }
 local SACK_STAGE = #STAGES + 1
 
@@ -29,7 +30,7 @@ local function PickAnimation(model, anims)
     return 0
 end
 
-function ns.CreatePeon(parent)
+local function Create(parent)
     local model = CreateFrame("PlayerModel", nil, parent)
     model:SetSize(WIDTH, HEIGHT)
 
@@ -63,10 +64,10 @@ function ns.CreatePeon(parent)
     end
     model:SetScript("OnShow", Load)
 
-    function peon:SetHunch(amount)
+    function peon:SetProgress(progress)
         local stage = SACK_STAGE
         for i, s in ipairs(STAGES) do
-            if amount < s.upTo then
+            if progress < s.upTo then
                 stage = i
                 break
             end
@@ -80,3 +81,5 @@ function ns.CreatePeon(parent)
 
     return peon
 end
+
+ns.RegisterCharacter({ key = "peon", name = "Lazy Peon (3D)", create = Create })

@@ -4,9 +4,15 @@ local button
 
 local function UpdatePosition()
     local angle = math.rad(ns.db.minimapAngle)
+    local x, y = math.cos(angle), math.sin(angle)
+    -- On a square minimap the button follows the edge instead of a circle.
+    if GetMinimapShape and GetMinimapShape() == "SQUARE" then
+        local edge = math.max(math.abs(x), math.abs(y))
+        x, y = x / edge, y / edge
+    end
     local radius = Minimap:GetWidth() / 2 + 10
     button:ClearAllPoints()
-    button:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
+    button:SetPoint("CENTER", Minimap, "CENTER", x * radius, y * radius)
 end
 
 local function OnDragUpdate()
@@ -18,13 +24,19 @@ local function OnDragUpdate()
     UpdatePosition()
 end
 
+function ns.ApplyMinimapButtonSettings()
+    if not button then return end
+    UpdatePosition()
+    button:SetShown(ns.db.showMinimapButton)
+end
+
 function ns.InitMinimapButton()
     button = CreateFrame("Button", "PostureCheckMinimapButton", Minimap)
     button:SetSize(31, 31)
     button:SetFrameStrata("MEDIUM")
     button:SetFrameLevel(8)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    button:RegisterForDrag("MiddleButton")
+    button:RegisterForDrag("LeftButton")
     button:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 
     local bg = button:CreateTexture(nil, "BACKGROUND")
@@ -45,8 +57,7 @@ function ns.InitMinimapButton()
 
     button:SetScript("OnClick", function(_, mouse)
         if mouse == "RightButton" then
-            ns.ResetTimer()
-            ns.Print("Timer reset.")
+            ns.RestartTimer()
         else
             ns.ToggleOptions()
         end
@@ -60,16 +71,19 @@ function ns.InitMinimapButton()
     button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:AddLine("Posture Check")
-        local secs = math.ceil(ns.GetRemaining())
-        GameTooltip:AddLine(string.format("Next check in %d:%02d", math.floor(secs / 60), secs % 60), 1, 1, 1)
+        if ns.IsFinished() then
+            GameTooltip:AddLine("Finished!", 1, 1, 1)
+        else
+            GameTooltip:AddLine("Time left: " .. ns.FormatTime(ns.GetRemaining()), 1, 1, 1)
+        end
         GameTooltip:AddLine("Left-click: settings", 0.8, 0.8, 0.8)
-        GameTooltip:AddLine("Right-click: reset timer", 0.8, 0.8, 0.8)
-        GameTooltip:AddLine("Middle-drag: move button", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("Right-click: restart timer", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("Drag: move button", 0.8, 0.8, 0.8)
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", function()
         GameTooltip:Hide()
     end)
 
-    UpdatePosition()
+    ns.ApplyMinimapButtonSettings()
 end

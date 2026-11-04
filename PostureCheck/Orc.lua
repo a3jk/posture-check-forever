@@ -17,7 +17,7 @@ local CC = (W - 1) / 2      -- centre column in grid pixels
 local WAIST_Y = 9
 local HEAD_R = 2.7
 local LEVELS = 40           -- distinct poses
-local SACK_AT = 0.9
+local SACK_AT = ns.STAGES.sack
 local SACK_LEVEL = math.floor(SACK_AT * LEVELS + 0.5)
 local SACK_X = 11
 
@@ -25,8 +25,8 @@ local SACK_X = 11
 local BREATH_PERIOD = 3.2   -- grows as he slouches, so he breathes slower
 local BLINK_EVERY = 4
 local BLINK_TIME = 0.15
-local DROWSY_AT = 0.5       -- blinks get longer from here...
-local DOZE_AT = 0.78        -- ...and from here his eyes stay shut
+local DROWSY_AT = ns.STAGES.drowsy   -- blinks get longer from here...
+local DOZE_AT = ns.STAGES.asleep     -- ...and from here his eyes stay shut
 local Z_STEP = 0.6          -- time per step of the rising "z"
 
 local PALETTE = {
@@ -104,24 +104,6 @@ end
 
 local function Row(y)
     return floor(y * SCALE)
-end
-
-local function Outline(grid)
-    local out = {}
-    for gy = 0, H - 1 do
-        for gx = 0, W - 1 do
-            local i = gy * W + gx + 1
-            local c = grid[i]
-            if not c then
-                if (gx > 0 and grid[i - 1]) or (gx < W - 1 and grid[i + 1])
-                    or (gy > 0 and grid[i - W]) or (gy < H - 1 and grid[i + W]) then
-                    c = "outline"
-                end
-            end
-            out[i] = c
-        end
-    end
-    return out
 end
 
 ---------------------------------------------------------------------------
@@ -222,7 +204,7 @@ local function SampleOrc(pose, px, py)
     return nil
 end
 
-local function DrawOrc(bend, lift, eyesShut, zStep)
+local function DrawOrc(bend, lift, eyesShut, zStep, drowsy)
     local pose = BuildPose(bend, lift)
     local grid = {}
     Fill(grid, function(px, py) return SampleOrc(pose, px, py) end)
@@ -235,7 +217,7 @@ local function DrawOrc(bend, lift, eyesShut, zStep)
         PutPair(grid, 2, eye, "eye")
     end
     -- Angry brows, lower on the inside; they relax as he gets tired.
-    PutPair(grid, 1, eye + (bend < DROWSY_AT and 1 or 2), "outline")
+    PutPair(grid, 1, eye + (drowsy and 2 or 1), "outline")
     PutPair(grid, 2, eye + 2, "outline")
     PutPair(grid, 3, eye + 2, "outline")
 
@@ -317,83 +299,71 @@ end
 
 -- Picks the animation frame for a level at time `now`. Returns a cache key
 -- and the arguments for DrawOrc (nothing for the sack, which doesn't move).
+-- The stages compare against `progress`; `bend` runs 0..1 up to the sack.
 local function Frame(level, now)
     if level >= SACK_LEVEL then return tostring(level) end
+    local progress = level / LEVELS
     local bend = level / SACK_LEVEL
 
     local period = BREATH_PERIOD * (1 + bend)
     local lift = sin(2 * pi * now / period) > 0 and 1 / SCALE or 0     -- one pixel
 
     local shut, zStep
-    if bend >= DOZE_AT then
+    if progress >= DOZE_AT then
         shut = true
         zStep = floor(now / Z_STEP) % 3
     else
-        local blink = BLINK_TIME + max(0, bend - DROWSY_AT) * 6
+        local blink = BLINK_TIME + max(0, progress - DROWSY_AT) * 6
         shut = now % BLINK_EVERY < blink
     end
 
     local key = string.format("%d:%d:%s:%s", level, lift > 0 and 1 or 0, tostring(shut), tostring(zStep))
-    return key, bend, lift, shut, zStep
+    return key, bend, lift, shut, zStep, progress >= DROWSY_AT
 end
 
-local function Rasterize(level, bend, lift, shut, zStep)
+local function Rasterize(level, bend, lift, shut, zStep, drowsy)
+    local grid
     if level >= SACK_LEVEL then
-        return Outline(DrawSack((level - SACK_LEVEL) / (LEVELS - SACK_LEVEL)))
+        grid = DrawSack((level - SACK_LEVEL) / (LEVELS - SACK_LEVEL))
+    else
+        grid = DrawOrc(bend, lift, shut, zStep, drowsy)
     end
-    return Outline(DrawOrc(bend, lift, shut, zStep))
+    return ns.Pixels.Outline(grid, W, H)
 end
 
 local cache = {}
 
-function ns.CreateOrc(parent)
+local function Create(parent)
     local holder = CreateFrame("Frame", nil, parent)
     holder:SetSize(W * PIXEL, H * PIXEL)
 
-    local pixels = {}
-    for gy = 0, H - 1 do
-        for gx = 0, W - 1 do
-            local tex = holder:CreateTexture(nil, "ARTWORK")
-            tex:SetSize(PIXEL, PIXEL)
-            tex:SetPoint("BOTTOMLEFT", gx * PIXEL, gy * PIXEL)
-            tex:Hide()
-            pixels[gy * W + gx + 1] = tex
-        end
+    local pixels = ns.Pixels.CreateTextures(holder, W, H)
+    for i, tex in ipairs(pixels) do
+        tex:SetSize(PIXEL, PIXEL)
+        tex:SetPoint("BOTTOMLEFT", ((i - 1) % W) * PIXEL, floor((i - 1) / W) * PIXEL)
     end
 
     local orc = { frame = holder }
     local shown = {}    -- color currently on each pixel
 
-    -- Called every tick: the pose follows `amount`, the animation follows the clock.
-    function orc:SetHunch(amount)
-        if amount < 0 then amount = 0 elseif amount > 1 then amount = 1 end
-        local level = floor(amount * LEVELS)
-        local key, bend, lift, shut, zStep = Frame(level, GetTime())
+    -- Called every tick: the pose follows `progress`, the animation follows the clock.
+    function orc:SetProgress(progress)
+        if progress < 0 then progress = 0 elseif progress > 1 then progress = 1 end
+        local level = floor(progress * LEVELS)
+        local key, bend, lift, shut, zStep, drowsy = Frame(level, GetTime())
         if key == self.key then return end
         self.key = key
 
         local grid = cache[key]
         if not grid then
-            grid = Rasterize(level, bend, lift, shut, zStep)
+            grid = Rasterize(level, bend, lift, shut, zStep, drowsy)
             cache[key] = grid
         end
-        -- Only touch the pixels that changed since the last frame.
-        for i = 1, W * H do
-            local c = grid[i]
-            if c ~= shown[i] then
-                shown[i] = c
-                local tex = pixels[i]
-                if c then
-                    local rgb = PALETTE[c]
-                    tex:SetColorTexture(rgb[1], rgb[2], rgb[3], 1)
-                    tex:Show()
-                else
-                    tex:Hide()
-                end
-            end
-        end
+        ns.Pixels.Paint(pixels, grid, PALETTE, shown)
     end
 
-    orc:SetHunch(0)
+    orc:SetProgress(0)
     return orc
 end
+
+ns.RegisterCharacter({ key = "pixel", name = "Pixel orc", create = Create })

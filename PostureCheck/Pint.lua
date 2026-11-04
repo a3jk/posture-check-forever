@@ -80,24 +80,6 @@ local function Sample(gx, gy, beerTop, foamTop, full)
     return left and "shine" or "air"
 end
 
-local function Outline(grid)
-    local out = {}
-    for gy = 0, H - 1 do
-        for gx = 0, W - 1 do
-            local i = gy * W + gx + 1
-            local c = grid[i]
-            if not c then
-                if (gx > 0 and grid[i - 1]) or (gx < W - 1 and grid[i + 1])
-                    or (gy > 0 and grid[i - W]) or (gy < H - 1 and grid[i + W]) then
-                    c = "outline"
-                end
-            end
-            out[i] = c
-        end
-    end
-    return out
-end
-
 local function BeerTop(beerRows)
     return BASE_ROWS + beerRows - 1
 end
@@ -114,28 +96,17 @@ local function Rasterize(beerRows)
             grid[gy * W + gx + 1] = Sample(gx, gy, beerTop, foamTop, full)
         end
     end
-    return Outline(grid)
-end
-
-local function SetColor(tex, name)
-    local rgb = PALETTE[name]
-    tex:SetColorTexture(rgb[1], rgb[2], rgb[3], rgb[4] or 1)
+    return ns.Pixels.Outline(grid, W, H)
 end
 
 local cache = {}
 
-function ns.CreatePint(parent)
+local function Create(parent)
     local holder = CreateFrame("Frame", nil, parent)
     holder:SetSize(W * PIXEL, H * PIXEL)
 
-    local pixels = {}
-    for gy = 0, H - 1 do
-        for gx = 0, W - 1 do
-            local tex = holder:CreateTexture(nil, "ARTWORK")
-            tex:Hide()
-            pixels[gy * W + gx + 1] = tex
-        end
-    end
+    local pixels = ns.Pixels.CreateTextures(holder, W, H)
+    local shown = {}    -- color currently on each pixel
 
     -- Lays the pixels out turned by `angle` around the middle of the glass.
     -- Tilted pixels are drawn a little larger so no gaps show between them.
@@ -158,32 +129,15 @@ function ns.CreatePint(parent)
     end
     PlacePixels(0)
 
-    -- Once finished, the glass waits for a click to be refilled.
-    holder:EnableMouse(false)
-    holder:SetScript("OnMouseUp", function()
-        GameTooltip:Hide()
-        ns.ResetTimer()
-    end)
-    holder:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:AddLine("Finished!")
-        GameTooltip:AddLine("Click the glass for the next pint", 0.8, 0.8, 0.8)
-        GameTooltip:Show()
-    end)
-    holder:SetScript("OnLeave", function()
-        GameTooltip:Hide()
-    end)
-
     local bubbles = {}
     for i = 1, #BUBBLES do
         local tex = holder:CreateTexture(nil, "OVERLAY")
         tex:SetSize(PIXEL, PIXEL)
-        SetColor(tex, "bubble")
+        ns.Pixels.SetColor(tex, PALETTE.bubble)
         bubbles[i] = tex
     end
 
-    -- The timer doesn't restart on its own while the pint is shown.
-    local pint = { frame = holder, beerRows = -1, waitsForClick = true }
+    local pint = { frame = holder, beerRows = -1 }
 
     local function MoveBubbles()
         local height = pint.beerRows - 1    -- keep bubbles below the foam
@@ -213,25 +167,20 @@ function ns.CreatePint(parent)
         holder:SetAlpha(dim and 0.2 or 1)
     end
 
-    -- Shares the characters' interface: amount 0 is a full pint, 1 is empty.
-    -- `finished` is true while the timer waits to be reset.
-    function pint:SetHunch(amount, finished)
+    -- Progress 0 is a full pint, 1 is empty.
+    function pint:SetProgress(progress, finished)
         if finished then
-            if not self.finishedAt then
-                self.finishedAt = GetTime()
-                holder:EnableMouse(true)
-            end
+            self.finishedAt = self.finishedAt or GetTime()
             Finish(GetTime() - self.finishedAt)
         elseif self.finishedAt then
             self.finishedAt = nil
             self.angle = 0
-            holder:EnableMouse(false)
             holder:SetAlpha(1)
             PlacePixels(0)
         end
 
-        if amount < 0 then amount = 0 elseif amount > 1 then amount = 1 end
-        local beerRows = ceil((1 - amount) * BEER_ROWS)
+        if progress < 0 then progress = 0 elseif progress > 1 then progress = 1 end
+        local beerRows = ceil((1 - progress) * BEER_ROWS)
         if beerRows ~= self.beerRows then
             self.beerRows = beerRows
             local grid = cache[beerRows]
@@ -239,20 +188,14 @@ function ns.CreatePint(parent)
                 grid = Rasterize(beerRows)
                 cache[beerRows] = grid
             end
-            for i = 1, W * H do
-                local c = grid[i]
-                local tex = pixels[i]
-                if c then
-                    SetColor(tex, c)
-                    tex:Show()
-                else
-                    tex:Hide()
-                end
-            end
+            ns.Pixels.Paint(pixels, grid, PALETTE, shown)
         end
         MoveBubbles()
     end
 
-    pint:SetHunch(0)
+    pint:SetProgress(0)
     return pint
 end
+
+-- Once finished, the glass waits for a click to be refilled (see TimerFrame.lua).
+ns.RegisterCharacter({ key = "pint", name = "Pint of beer", create = Create, waitsForClick = true })

@@ -1,16 +1,18 @@
 ## Interface: 11509
 ## Title: Posture Check
-## Notes: A posture (or drinking pace) reminder timer with a slouching orc or a draining pint.
-## Version: 1.0.0
+## Notes: A posture (or drinking pace) reminder timer with a slouching peon or a draining pint.
+## Version: @project-version@
 ## SavedVariables: PostureCheckDB
 ## IconTexture: Interface\Icons\INV_Misc_PocketWatch_01
+## X-Curse-Project-ID: 1776236
 
 Sounds.lua
 Styles.lua
+Pixels.lua
 Core.lua
+Peon.lua
 Orc.lua
 Pint.lua
-Peon.lua
 TimerFrame.lua
 MinimapButton.lua
 Options.lua

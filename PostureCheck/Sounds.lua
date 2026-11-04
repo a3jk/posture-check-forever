@@ -52,6 +52,7 @@ local function PlayFile(file)
     return ok and willPlay ~= false
 end
 
+-- Returns false when the chosen sound couldn't play and the fallback played instead.
 function ns.PlayConfiguredSound()
     local entry = ns.GetSoundEntry(ns.db.sound)
     local played
@@ -75,4 +76,5 @@ function ns.PlayConfiguredSound()
     if not played then
         PlayKit("RAID_WARNING")
     end
+    return played == true
 end

@@ -1,11 +1,28 @@
 local _, ns = ...
 
--- Appearance presets for the timer bar and the frame around the timer.
+-- The choices offered in the options: characters, and the styles for the
+-- timer bar and the window around the timer.
 
-ns.CHARACTERS = {
-    { key = "peon",  name = "Lazy Peon (3D)" },
-    { key = "pixel", name = "Pixel orc" },
-    { key = "pint",  name = "Pint of beer" },
+-- Characters register themselves from their own files, in TOC order. Each
+-- entry has `key`, `name`, `create(parent)` and optionally `waitsForClick`
+-- (clicking the character is how the timer restarts, like the pint).
+-- `create` returns an object with:
+--   frame                            the character's frame, sized to fit it
+--   SetProgress(progress, finished)  called every tick; progress runs 0..1
+--                                    and `finished` is true while the timer
+--                                    waits to be restarted
+ns.CHARACTERS = {}
+
+function ns.RegisterCharacter(entry)
+    tinsert(ns.CHARACTERS, entry)
+end
+
+-- Posture stages shared by the characters, as fractions of the timer, so
+-- they all show the same state at the same time.
+ns.STAGES = {
+    drowsy = 0.5,   -- getting tired
+    asleep = 0.75,  -- eyes shut
+    sack   = 0.9,   -- gave up and turned into a sack
 }
 
 ns.BAR_TEXTURES = {

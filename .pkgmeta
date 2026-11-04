@@ -1,0 +1,10 @@
+package-as: PostureCheck
+
+# The addon lives in a subfolder; ship that folder as the package root.
+move-folders:
+  PostureCheck/PostureCheck: PostureCheck
+
+ignore:
+  - README.md
+  - media
+  - TODO.md
