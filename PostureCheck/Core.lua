@@ -32,7 +32,7 @@ ns.defaults = {
     frameAlpha = 0.75,
     showMinimapButton = true,
     minimapAngle = 220,
-    uplift = true,
+    uplift = false,
 }
 
 -- One-click setups for what the timer is used for. They only change what
@@ -44,7 +44,7 @@ ns.PRESETS = {
       alertMessage = "Bottoms up! Finish your pint." },
 }
 
-local DB_VERSION = 2
+local DB_VERSION = 3
 -- Saved keys without a default, which a settings reset leaves alone.
 local EXTRA_KEYS = { point = true, dbVersion = true, upliftDay = true, upliftCount = true, upliftGreeted = true }
 local ALERT_SECONDS = 5
@@ -67,6 +67,10 @@ local function Migrate(db)
         if db.point and db.scale then
             db.point[3], db.point[4] = db.point[3] * db.scale, db.point[4] * db.scale
         end
+    end
+    -- 1.2.0 had the uplifting checkbox on by default; start everyone with it off.
+    if (db.dbVersion or 1) < 3 then
+        db.uplift = nil
     end
     db.dbVersion = DB_VERSION
     for k in pairs(db) do
