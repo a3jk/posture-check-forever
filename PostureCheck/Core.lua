@@ -32,6 +32,7 @@ ns.defaults = {
     frameAlpha = 0.75,
     showMinimapButton = true,
     minimapAngle = 220,
+    uplift = true,
 }
 
 -- One-click setups for what the timer is used for. They only change what
@@ -44,7 +45,8 @@ ns.PRESETS = {
 }
 
 local DB_VERSION = 2
-local EXTRA_KEYS = { point = true, dbVersion = true }  -- saved keys without a default
+-- Saved keys without a default, which a settings reset leaves alone.
+local EXTRA_KEYS = { point = true, dbVersion = true, upliftDay = true, upliftCount = true, upliftGreeted = true }
 local ALERT_SECONDS = 5
 
 local timer = { start = 0, done = false, alertUntil = 0 }
@@ -246,6 +248,7 @@ driver:SetScript("OnEvent", function(self, event, arg1)
         ns.InitTimerFrame()
         ns.InitMinimapButton()
         ns.InitOptions()
+        ns.InitUplift()
         ns.ResetTimer()
         self:SetScript("OnUpdate", OnUpdate)
     end

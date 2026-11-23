@@ -156,7 +156,7 @@ local function AddCheckbox(col, text, key, onChange)
         cb:SetChecked(ns.db[key])
     end
 
-    col:Place(cb, 26, -4)
+    if col then col:Place(cb, 26, -4) end
     return cb
 end
 
@@ -370,6 +370,9 @@ local function CreatePanel()
         StaticPopup_Show("POSTURECHECK_RESET_SETTINGS")
     end)
     defaults:SetPoint("BOTTOMRIGHT", -16, 14)
+
+    local uplift = AddCheckbox(nil, "Uplifting checkbox", "uplift")
+    uplift:SetPoint("BOTTOMLEFT", 16, 13)
 
     panel:SetScript("OnShow", Refresh)
 end

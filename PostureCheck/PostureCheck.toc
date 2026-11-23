@@ -10,6 +10,7 @@ Sounds.lua
 Styles.lua
 Pixels.lua
 Core.lua
+Uplift.lua
 Peon.lua
 Orc.lua
 Pint.lua
